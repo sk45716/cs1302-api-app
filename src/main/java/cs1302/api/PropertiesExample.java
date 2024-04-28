@@ -36,12 +36,12 @@ public class PropertiesExample {
             Properties config = new Properties();
             config.load(configFileStream);
             config.list(System.out);                             // list all using standard out
-            String dogApiKey = config.getProperty("dogapi.key"); // get dogapi.key
-            String catApiKey = config.getProperty("catapi.key"); // get catapi.key
-            System.out.printf("dogApiKey = \"%s\"\n", dogApiKey);
-            System.out.printf("catApiKey = \"%s\"\n", catApiKey);
+            String animeKey = config.getProperty("animenewsnetwork.key"); // get dogapi.key
+            String jokeApiKey = config.getProperty("jokeapi.key"); // get catapi.key
+            System.out.printf("AnimeNewsNetwork API Key  = \"%s\"\n", animeKey);
+            System.out.printf("JokeAPI Key = \"%s\"\n", jokeApiKey);
         } catch (IOException ioe) {
-            System.err.println(ioe);
+            System.err.println("Error reading from the config file.");
             ioe.printStackTrace();
         } // try
 

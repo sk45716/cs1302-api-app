@@ -1,5 +1,10 @@
 package cs1302.api;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import com.google.gson.Gson;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.scene.control.Label;
@@ -17,6 +22,10 @@ public class ApiApp extends Application {
     Scene scene;
     VBox root;
 
+
+    private static final String ANIME_API_KEY = "your-anime-api-key-here";
+    private static final String JOKE_API_KEY = "your-joke-api-key-here";
+
     /**
      * Constructs an {@code ApiApp} object. This default (i.e., no argument)
      * constructor is executed in Step 2 of the JavaFX Application Life-Cycle.
@@ -24,6 +33,50 @@ public class ApiApp extends Application {
     public ApiApp() {
         root = new VBox();
     } // ApiApp
+
+   private void performApiRequests(String searchTerm) {
+    String animeApiUri = buildAnimeApiUri(searchTerm);
+    HttpClient client = HttpClient.newHttpClient();
+    HttpRequest request = HttpRequest.newBuilder()
+                                      .uri(URI.create(animeApiUri))
+                                      .header("Authorization", "Bearer " + ANIME_API_KEY)
+                                      .build();
+
+    client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+          .thenApply(response -> response.body())
+          .thenApply(jsonResponse -> parseAnimeApiResponse(jsonResponse))
+          .thenAccept(animeResponse -> {
+              String jokeApiUri = buildJokeApiUri(animeResponse);
+              HttpRequest secondRequest = HttpRequest.newBuilder()
+                                                      .uri(URI.create(jokeApiUri))
+                                                      .header("Authorization", "Bearer " + JOKE_API_KEY)
+                                                      .build();
+
+              client.sendAsync(secondRequest, HttpResponse.BodyHandlers.ofString())
+                    .thenApply(response -> response.body())
+                    .thenApply(jsonResponse -> parseJokeApiResponse(jsonResponse))
+                    .thenAccept(jokeResponse -> Platform.runLater(() -> {
+                        updateUiWithApiResponse(animeResponse, jokeResponse);
+                    }));
+          });
+}
+
+    private String buildFirstApiUri(String searchTerm) {
+        return "http://example.com/api/first?search=" + searchTerm;
+    }
+
+    private String buildSecondApiUri(FirstApiResponse response) {
+        return "http://example.com/api/second?data= " + response.getSomeData();
+    }
+
+    private FirstApiResponse parseFirstApiResponse(String jsonResponse) {
+        return new Gson().fromJson(jsonResponse, FirstApiResponse.class);
+    }
+    privae SecondApiResponse parseSecondApiResponse(String jsonResponse) {
+        return new Gson().fromJson(jsonResponse, SecondApiResponse.class);
+    }
+
+
 
     /** {@inheritDoc} */
     @Override
