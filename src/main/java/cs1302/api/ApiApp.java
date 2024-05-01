@@ -1,105 +1,76 @@
 package cs1302.api;
 
-import java.net.URI;
-import java.net.URLEncoder;
+
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
-import java.util.function.Consumer;
-import java.util.function.Function;
-import com.google.gson.Gson;
+import java.io.IOException;
 import javafx.application.Application;
 import javafx.application.Platform;
-import javafx.scene.control.Button;
-import javafx.scene.control.Label;
-import javafx.scene.control.TextField;
-import javafx.scene.image.Image;
-import javafx.scene.image.ImageView;
 import javafx.scene.layout.HBox;
-import javafx.scene.layout.VBox;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
+import javafx.scene.control.TextField;
+import javafx.scene.control.Button;
+import javafx.scene.control.Label;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import javafx.scene.layout.GridPane;
+import javafx.scene.layout.VBox;
+import javafx.geometry.Pos;
+import javafx.geometry.Insets;
+import javafx.concurrent.Task;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import javafx.scene.control.TextArea;
+import javafx.scene.control.Alert;
+import javafx.scene.control.Alert.AlertType;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.ArrayList;
 import java.util.List;
+import javafx.scene.control.ProgressBar;
+import javafx.animation.Timeline;
+import javafx.animation.KeyFrame;
+import javafx.util.Duration;
+import javafx.scene.control.Alert;
+import javafx.scene.control.Alert.AlertType;
 
 /**
  * REPLACE WITH NON-SHOUTING DESCRIPTION OF YOUR APP.
  */
 public class ApiApp extends Application {
-    Stage stage;
-    Scene scene;
-    VBox root;
-    private HttpClient client = HttpClient.newHttpClient();
-    private Gson gson = new Gson();
 
-     public static class AnimeSearchResponse {
-        private List<AnimeResult> results;
 
-        public List<AnimeResult> getResults() {
-            return results;
-        }
-
-        public void setResults(List<AnimeResult> results) {
-            this.results = results;
-        }
+    /**
+     * Class to handle the cat fact JSON response.
+     */
+    private static class CatFactResponse {
+        String fact;
     }
 
-    // Nested static class for Anime result
-    public static class AnimeResult {
-        private String title;
-        private String imageUrl;
+    private static final int NUM_IMAGES = 5;
+      private static final String CAT_IMAGE_API = "https://cataas.com/cat";
+    private static final String CAT_FACTS_API = "https://catfact.ninja/fact";
 
-        public String getTitle() {
-            return title;
-        }
+    private static HttpClient client = HttpClient.newBuilder()
+        .version(HttpClient.Version.HTTP_2)
+        .followRedirects(HttpClient.Redirect.NORMAL)
+        .build();
+    private static Gson gson = new GsonBuilder().create();
 
-        public void setTitle(String title) {
-            this.title = title;
-        }
+     private Stage stage;
+    private Scene scene;
+    private VBox root;
+    private Button generateButton;
+    private ImageView catImageView;
+    private GridPane imageGrid;
+    private TextArea catFactArea;
+    private ProgressBar progressBar;
+    private Timeline progressBarTimeline;
 
-        public String getImageUrl() {
-            return imageUrl;
-        }
-
-        public void setImageUrl(String imageUrl) {
-            this.imageUrl = imageUrl;
-        }
-    }
-
-    // Nested static class for AniDB search response
-    public static class AniDBSearchResponse {
-        private List<AnimeDetail> animeDetails;
-
-        public List<AnimeDetail> getAnimeDetails() {
-            return animeDetails;
-        }
-
-        public void setAnimeDetails(List<AnimeDetail> animeDetails) {
-            this.animeDetails = animeDetails;
-        }
-    }
-
-    // Nested static class for Anime detail
-    public static class AnimeDetail {
-        private String title;
-        private String description;
-
-        public String getTitle() {
-            return title;
-        }
-
-        public void setTitle(String title) {
-            this.title = title;
-        }
-
-        public String getDescription() {
-            return description;
-        }
-
-        public void setDescription(String description) {
-            this.description = description;
-        }
-    }
     /**
      * Constructs an {@code ApiApp} object. This default (i.e., no argument)
      * constructor is executed in Step 2 of the JavaFX Application Life-Cycle.
@@ -108,150 +79,146 @@ public class ApiApp extends Application {
         root = new VBox();
     } // ApiApp
 
-   private void performApiRequests(String searchTerm) {
-       searchAnime(searchTerm);
-   }
+    private void createComponents() {
+        generateButton = new Button("Generate");
+        generateButton.setOnAction(e -> generateCatContent());
+
+        catImageView = new ImageView();
+        catImageView.setFitWidth(300);
+        catImageView.setFitHeight(300);
+        catImageView.setPreserveRatio(true);
+
+        catFactArea = new TextArea();
+        catFactArea.setEditable(false);
+        catFactArea.setWrapText(true);
+        catFactArea.setPrefHeight(100);
+
+        progressBar = new ProgressBar(0);
+        progressBar.setPrefWidth(300);
+
+        imageGrid = new GridPane();
+        imageGrid.setPadding(new Insets(5));
+        imageGrid.setHgap(10);
+        imageGrid.setVgap(10);
+        root.getChildren().add(imageGrid);
+
+        HBox topBar = new HBox(generateButton);
+        topBar.setAlignment(Pos.CENTER);
+        topBar.setPadding(new Insets(10));
+
+        VBox contentBox = new VBox(20, catImageView, progressBar, catFactArea);
+        contentBox.setAlignment(Pos.CENTER);
+        contentBox.setPadding(new Insets(5));
+
+        root = new VBox(10, topBar, contentBox);
+        root.setAlignment(Pos.CENTER);
+        root.setPadding(new Insets(10));
+    }
 
 
-   private void searchAnime(String searchTerm) {
-         String jikanSearchUri = buildJikanApiUri(searchTerm);
-    HttpRequest jikanRequest = HttpRequest.newBuilder()
-        .uri(URI.create(jikanSearchUri))
+    /**
+     * Initalizes the application components and variables.
+     */
+    @Override
+    public void init() {
+        System.out.println("init() called");
+        createComponents();
+    }
+
+    private void generateCatContent() {
+    progressBar.setProgress(ProgressBar.INDETERMINATE_PROGRESS);
+    fetchCatFact(0);
+}
+
+    /**
+     * Fetches cat images and a cat fact.
+     */
+    private void fetchCatContent() {
+          // Clear existing content in the grid
+    imageGrid.getChildren().clear();
+
+    // Generate new cat images and facts
+    for (int i = 0; i < 5; i++) {
+        final int index = i;
+        ImageView imageView = new ImageView();
+        imageView.setFitWidth(200);  // Adjust width as per UI needs
+        imageView.setFitHeight(200); // Adjust height as per UI needs
+
+        // Fetch and set cat image
+        Image image = new Image(CAT_IMAGE_API + "?random=" + Math.random(), true);
+        imageView.setImage(image);
+
+        // Fetch cat fact and display it
+        fetchCatFact(index);
+
+        final ImageView finalImageView = imageView;
+        // Add the ImageView to the grid
+        Platform.runLater(() -> imageGrid.add(finalImageView, index % 5, index / 5));
+    }
+    }
+
+
+    private void fetchCatFact(final int index) {
+          HttpRequest request = HttpRequest.newBuilder()
+        .uri(URI.create(CAT_FACTS_API))
         .build();
 
-    client.sendAsync(jikanRequest, HttpResponse.BodyHandlers.ofString())
-        .thenApply(response -> response.body())
-        .thenApply(jsonResponse -> {
-            System.out.println("API Response: " + jsonResponse); // Log the raw JSON response
-            return gson.fromJson(jsonResponse, AnimeSearchResponse.class);
-        })
-        .thenAccept(animeResponse -> {
-            if (animeResponse != null && animeResponse.getResults() != null && !animeResponse.getResults().isEmpty()) {
-                displayAnimeResults(animeResponse);
+    Task<String> task = new Task<>() {
+        @Override
+        protected String call() throws Exception {
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() == 200) {
+                Gson gson = new Gson();
+                CatFactResponse catFactResponse = gson.fromJson(response.body(), CatFactResponse.class);
+                return catFactResponse.fact;
             } else {
-                displayErrorMessage("No anime results found or data is incomplete.");
-            }
-        })
-        .exceptionally(e -> {
-            e.printStackTrace(); // Print the stack trace for the exception
-            displayErrorMessage("Error processing anime search: " + e.getMessage());
-            return null;
-        });
-   }
-
-
-    private String buildJikanApiUri(String searchTerm) {
-         return "https://api.jikan.moe/v4/anime?q=" + URLEncoder.encode(searchTerm, StandardCharsets.UTF_8);
-    }
-
-    private String buildAniDBApiUri(String relatedGenres) {
-    String endpoint = "http://api.anidb.net:9001/httpapi";
-    String client = "your-client-name";
-    String clientver = "1";
-    String protover = "1";
-    String apiKey = "your-anidb-api-key-here";  // Your API key for AniDB
-
-    String queryParams = String.format("client=%s&clientver=%s&protover=%s&apikey=%s&request=anime&title=%s",
-                                       client, clientver, protover, apiKey,
-                                       URLEncoder.encode(relatedGenres, StandardCharsets.UTF_8));
-
-    return endpoint + "?" + queryParams;
-}
-
-private void displayAnimeResults(AnimeSearchResponse animeResponse) {
-   Platform.runLater(new Runnable() {
-        @Override
-        public void run() {
-            root.getChildren().clear();
-            Label resultsLabel = new Label("Anime Search Results:");
-            root.getChildren().add(resultsLabel);
-            for (AnimeResult result : animeResponse.getResults()) {
-                Label titleLabel = new Label(result.getTitle());
-                Image image = new Image(result.getImageUrl(), true);
-                ImageView imageView = new ImageView(image);
-                imageView.setFitHeight(100);
-                imageView.setPreserveRatio(true);
-                VBox vbox = new VBox(5, titleLabel, imageView);
-                root.getChildren().add(vbox);
+                throw new IOException("Failed to fetch cat fact: " + response.statusCode());
             }
         }
-    });
-}
+    };
 
-    private void searchAniDB(String relatedGenres) {
-         String aniDbSearchUri = buildAniDBApiUri(relatedGenres);
-    HttpClient client = HttpClient.newHttpClient();
-    HttpRequest aniDbRequest = HttpRequest.newBuilder()
-                                          .uri(URI.create(aniDbSearchUri))
-                                          .build();
+    task.setOnSucceeded(e -> {
+        final String fact = task.getValue(); // Declare 'fact' as final so it can be used inside lambda
+        Platform.runLater(() -> {
+            // Update the TextArea for displaying the fact
+            catFactArea.setText(fact);
 
-    client.sendAsync(aniDbRequest, HttpResponse.BodyHandlers.ofString())
-          .thenApply(response -> response.body())
-          .thenApply(jsonResponse -> {
-              try {
-                  return new Gson().fromJson(jsonResponse, AniDBSearchResponse.class);
-              } catch (Exception e) {
-                  displayErrorMessage("Failed to parse AniDB results");
-                  return null; // Returning null to handle this in subsequent steps.
-              }
-          })
-          .thenAccept(aniDbResponse -> {
-              if (aniDbResponse != null) {
-                  displayAniDBResults(aniDbResponse);
-              } else {
-                  // Handle null case or update UI to show an error message
-                  displayErrorMessage("AniDB data could not be loaded.");
-              }
-          });
-}
+            // Create a label to show the fact below the corresponding image
+            Label factLabel = new Label(fact);
+            factLabel.setWrapText(true);
+            // Assuming each row in the grid is reserved for an image and its fact label
+            imageGrid.add(factLabel, index % 5, (index / 5) * 2 + 1);
 
-private void displayAniDBResults(AniDBSearchResponse response) {
-   Platform.runLater(() -> {
-            for (AnimeDetail detail : response.getAnimeDetails()) {
-                Label titleLabel = new Label("Title: " + detail.getTitle());
-                Label descriptionLabel = new Label("Description: " + detail.getDescription());
-                VBox vbox = new VBox(5, titleLabel, descriptionLabel);
-                root.getChildren().add(vbox);
-            }
+            // Set progress to indicate completion
+            progressBar.setProgress(1.0);
         });
+        });
+
+    task.setOnFailed(e -> {
+        final String errorMessage = "Failed to load cat fact."; // Declare 'errorMessage' as final
+        Platform.runLater(() -> {
+            catFactArea.setText(errorMessage);
+            showAlert("Error", "Fetch Failed", "Unable to retrieve cat fact.");
+            progressBar.setProgress(0);
+        });
+    });
+
+    new Thread(task).start();
 }
 
-
-// This method would be used to display an error message in the UI
-    private void displayErrorMessage(String message) {
-       Platform.runLater(new Runnable() {
-        @Override
-        public void run() {
-            root.getChildren().clear();
-            Label errorLabel = new Label(message);
-            root.getChildren().add(errorLabel);
-        }
-    });
-    }
-
-
-
+    private void showAlert(String title, String header, String message) {
+    Alert alert = new Alert(AlertType.ERROR);
+    alert.setTitle(title);
+    alert.setHeaderText(header);
+    alert.setContentText(message);
+    alert.showAndWait();
+}
     /** {@inheritDoc} */
     @Override
     public void start(Stage stage) {
 
         this.stage = stage;
 
-        TextField searchField = new TextField();
-    searchField.setPromptText("Type in an anime name");
-
-    Button searchButton = new Button("Search");
-    searchButton.setOnAction(event -> performApiRequests(searchField.getText()));
-
-    HBox searchBox = new HBox(searchField, searchButton);
-    searchBox.setSpacing(10);
-    searchField.setPrefWidth(300); // set the preferred width of the search bar
-    searchButton.setPrefSize(100, 20);
-
-    Label welcomeText = new Label("Welcome to the anime channel search area. Type in an anime name in the search bar.");
-
-
-        root.getChildren().addAll(welcomeText, searchBox);
         scene = new Scene(root,800, 600);
 
         // setup stage
@@ -262,5 +229,10 @@ private void displayAniDBResults(AniDBSearchResponse response) {
         stage.show();
 
     } // start
+
+     @Override
+    public void stop() {
+        System.out.println("stop() called");
+    }
 
 } // ApiApp
