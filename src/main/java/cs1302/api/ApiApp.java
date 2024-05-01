@@ -1,6 +1,5 @@
 package cs1302.api;
 
-
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -43,16 +42,7 @@ import javafx.scene.control.Alert.AlertType;
  */
 public class ApiApp extends Application {
 
-
-    /**
-     * Class to handle the cat fact JSON response.
-     */
-    private static class CatFactResponse {
-        String fact;
-    }
-
-    private static final int NUM_IMAGES = 5;
-      private static final String CAT_IMAGE_API = "https://cataas.com/cat";
+    private static final String CAT_IMAGE_API = "https://cataas.com/cat";
     private static final String CAT_FACTS_API = "https://catfact.ninja/fact";
 
     private static HttpClient client = HttpClient.newBuilder()
@@ -70,7 +60,7 @@ public class ApiApp extends Application {
     private TextArea catFactArea;
     private ProgressBar progressBar;
     private Timeline progressBarTimeline;
-
+     private Label instructionsLabel;
     /**
      * Constructs an {@code ApiApp} object. This default (i.e., no argument)
      * constructor is executed in Step 2 of the JavaFX Application Life-Cycle.
@@ -94,23 +84,16 @@ public class ApiApp extends Application {
         catFactArea.setPrefHeight(100);
 
         progressBar = new ProgressBar(0);
-        progressBar.setPrefWidth(300);
+        progressBar.setPrefWidth(400);
 
-        imageGrid = new GridPane();
-        imageGrid.setPadding(new Insets(5));
-        imageGrid.setHgap(10);
-        imageGrid.setVgap(10);
-        root.getChildren().add(imageGrid);
+        instructionsLabel = new Label("Hello, there. Please click the generate button below to generate an cat image.");
+        instructionsLabel.setWrapText(true);
 
-        HBox topBar = new HBox(generateButton);
-        topBar.setAlignment(Pos.CENTER);
-        topBar.setPadding(new Insets(10));
-
-        VBox contentBox = new VBox(20, catImageView, progressBar, catFactArea);
+        VBox contentBox = new VBox(10, instructionsLabel, generateButton, catImageView, progressBar, catFactArea);
         contentBox.setAlignment(Pos.CENTER);
-        contentBox.setPadding(new Insets(5));
+        contentBox.setPadding(new Insets(10));
 
-        root = new VBox(10, topBar, contentBox);
+        root = new VBox(contentBox);
         root.setAlignment(Pos.CENTER);
         root.setPadding(new Insets(10));
     }
@@ -127,40 +110,38 @@ public class ApiApp extends Application {
 
     private void generateCatContent() {
     progressBar.setProgress(ProgressBar.INDETERMINATE_PROGRESS);
+    fetchCatImage(catImageView);
     fetchCatFact(0);
 }
 
-    /**
-     * Fetches cat images and a cat fact.
-     */
-    private void fetchCatContent() {
-          // Clear existing content in the grid
-    imageGrid.getChildren().clear();
 
-    // Generate new cat images and facts
-    for (int i = 0; i < 5; i++) {
-        final int index = i;
-        ImageView imageView = new ImageView();
-        imageView.setFitWidth(200);  // Adjust width as per UI needs
-        imageView.setFitHeight(200); // Adjust height as per UI needs
 
-        // Fetch and set cat image
-        Image image = new Image(CAT_IMAGE_API + "?random=" + Math.random(), true);
+    private void fetchCatImage(ImageView imageView) {
+        Image image = new Image(CAT_IMAGE_API, true);
         imageView.setImage(image);
 
-        // Fetch cat fact and display it
-        fetchCatFact(index);
+    image.progressProperty().addListener((obs, oldProgress, newProgress) -> {
+        if (newProgress.doubleValue() == 1.0) {
+            progressBar.setProgress(1.0);
+            fetchCatFact(0);  // Fetch the cat fact once the image is fully loaded
+        }
+    });
 
-        final ImageView finalImageView = imageView;
-        // Add the ImageView to the grid
-        Platform.runLater(() -> imageGrid.add(finalImageView, index % 5, index / 5));
-    }
-    }
+    image.exceptionProperty().addListener((observable, oldValue, exception) -> {
+        if (exception != null) {
+            Platform.runLater(() -> {
+                imageView.setImage(new Image("file:resources/default.png"));  // Fallback image
+                showAlert("Error", "Image Load Failed", "Failed to load cat image.");
+                progressBar.setProgress(0);
+            });
+        }
+    });
+}
 
-
-    private void fetchCatFact(final int index) {
-          HttpRequest request = HttpRequest.newBuilder()
+    private void fetchCatFact( int index) {
+        HttpRequest request = HttpRequest.newBuilder()
         .uri(URI.create(CAT_FACTS_API))
+        .header("Accept", "application/json")
         .build();
 
     Task<String> task = new Task<>() {
@@ -168,40 +149,23 @@ public class ApiApp extends Application {
         protected String call() throws Exception {
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 200) {
-                Gson gson = new Gson();
-                CatFactResponse catFactResponse = gson.fromJson(response.body(), CatFactResponse.class);
-                return catFactResponse.fact;
+                CatFactResponse factResponse = gson.fromJson(response.body(), CatFactResponse.class);
+                return factResponse.fact;
             } else {
                 throw new IOException("Failed to fetch cat fact: " + response.statusCode());
             }
         }
     };
 
-    task.setOnSucceeded(e -> {
-        final String fact = task.getValue(); // Declare 'fact' as final so it can be used inside lambda
-        Platform.runLater(() -> {
-            // Update the TextArea for displaying the fact
-            catFactArea.setText(fact);
+    task.setOnSucceeded(e -> Platform.runLater(() -> {
+                progressBar.setProgress(1);
+        catFactArea.setText(task.getValue());
+    }));
 
-            // Create a label to show the fact below the corresponding image
-            Label factLabel = new Label(fact);
-            factLabel.setWrapText(true);
-            // Assuming each row in the grid is reserved for an image and its fact label
-            imageGrid.add(factLabel, index % 5, (index / 5) * 2 + 1);
-
-            // Set progress to indicate completion
-            progressBar.setProgress(1.0);
-        });
-        });
-
-    task.setOnFailed(e -> {
-        final String errorMessage = "Failed to load cat fact."; // Declare 'errorMessage' as final
-        Platform.runLater(() -> {
-            catFactArea.setText(errorMessage);
-            showAlert("Error", "Fetch Failed", "Unable to retrieve cat fact.");
-            progressBar.setProgress(0);
-        });
-    });
+    task.setOnFailed(e -> Platform.runLater(() -> {
+        showAlert("Error", "Fetch Failed", "Unable to retrieve cat fact.");
+        progressBar.setProgress(0);
+    }));
 
     new Thread(task).start();
 }
@@ -222,7 +186,7 @@ public class ApiApp extends Application {
         scene = new Scene(root,800, 600);
 
         // setup stage
-        stage.setTitle("Anime Search App");
+        stage.setTitle("Random Cat Image App");
         stage.setScene(scene);
         stage.setOnCloseRequest(event -> Platform.exit());
         stage.sizeToScene();
