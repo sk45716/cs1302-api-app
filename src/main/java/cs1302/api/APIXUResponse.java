@@ -1,45 +1,34 @@
 package cs1302.api;
 
 public class APIXUResponse {
-    public Request request;
-    public Location location;
-    public Current current;
-
-     public static class Request {
-        public String type;
-        public String query;
-        public String language;
-        public String unit;
-    }
+     Location location;
+    Current current;
 
     public static class Location {
-        public String name;
-        public String country;
-        public String region;
-        public String lat;
-        public String lon;
-        public String timezone_id;
-        public String localtime;
-        public long localtime_epoch;
-        public String utc_offset;
+        String name;
+        String country;
+        String region;
+        String lat;
+        String lon;
+        String timezone_id;
+        String localtime;
+        long localtime_epoch;
+        String utc_offset;
     }
 
     public static class Current {
-        public String observation_time;
-        public int temperature;
-        public int weather_code;
-        public String[] weather_icons;
-        public String[] weather_descriptions;
-        public int wind_speed;
-        public int wind_degree;
-        public String wind_dir;
-        public int pressure;
-        public int precip;
-        public int humidity;
-        public int cloudcover;
-        public int feelslike;
-        public int uv_index;
-        public int visibility;
+        String observation_time;
+        int temperature;
+        String[] weather_icons;
+        String[] weather_descriptions;
+        int wind_speed;
+        String wind_dir;
+        int pressure;
+        int precip;
+        int humidity;
+        int cloudcover;
+        int feelslike;
+        int uv_index;
+        int visibility;
     }
-
 }

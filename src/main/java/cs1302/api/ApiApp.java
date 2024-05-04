@@ -27,6 +27,9 @@ import javafx.geometry.Pos;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 import javafx.scene.text.Font;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.io.UnsupportedEncodingException;
 
 /**
  * REPLACE WITH NON-SHOUTING DESCRIPTION OF YOUR APP.
@@ -51,8 +54,7 @@ public class ApiApp extends Application {
     private ProgressBar progressBar;
     private Label instructionsLabel;
     private Timeline progressBarTimeline;
-       private TextField latitudeInput;
-    private TextField longitudeInput;
+    private TextField cityInput;
 
     /**
      * Constructs an {@code ApiApp} object. This default (i.e., no argument)
@@ -88,15 +90,11 @@ public class ApiApp extends Application {
     titleLabel.setFont(new Font("Arial", 20));
     titleLabel.setAlignment(Pos.CENTER);
 
-    instructionsLabel = new Label("Hello. This is the Weather Data App. Please type in a longitude and latitude "
-                                  + "\n" + "for information related to the weather.");
+    instructionsLabel = new Label("Hello. This is the Weather Data App. Please type in a city name for weather information.");
     instructionsLabel.setFont(new Font("Arial", 14));
 
-    // Create the text fields for latitude and longitude inputs
-    latitudeInput = new TextField();
-    latitudeInput.setPromptText("Enter latitude (-90 to 90)");
-    longitudeInput = new TextField();
-    longitudeInput.setPromptText("Enter longitude (-180 to 180)");
+        cityInput = new TextField();
+        cityInput.setPromptText("Enter city name");
 
     // Create the button to fetch weather
     fetchWeatherButton = new Button("Fetch Weather");
@@ -113,15 +111,12 @@ public class ApiApp extends Application {
     progressBar.setPrefWidth(300);
 
     // Arrange latitude and longitude inputs horizontally
-    HBox latBox = new HBox(10, new Label("Latitude:"), latitudeInput);
-    latBox.setAlignment(Pos.CENTER);
+    HBox cityBox = new HBox(10, new Label("City:"), cityInput);
+    cityBox.setAlignment(Pos.CENTER);
 
-
-    HBox lonBox = new HBox(10, new Label("Longitude:"), longitudeInput);
-    lonBox.setAlignment(Pos.CENTER);
 
     // Main content box
-    VBox contentBox = new VBox(10, titleLabel, instructionsLabel, latBox, lonBox, fetchWeatherButton, progressBar, weatherDataArea);
+    VBox contentBox = new VBox(10, titleLabel, instructionsLabel, cityBox, fetchWeatherButton, progressBar, weatherDataArea);
     contentBox.setAlignment(Pos.CENTER);
     contentBox.setPadding(new Insets(5));  // Increased padding for aesthetics
 
@@ -133,20 +128,18 @@ public class ApiApp extends Application {
 
 
     private void fetchWeatherData() {
-         try {
-        double latitude = Double.parseDouble(latitudeInput.getText());
-        double longitude = Double.parseDouble(longitudeInput.getText());
-
-        if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
-            showAlert("Input Error", "Out of Bounds",
-                "The latitude range should be between -90 and 90, and the longitude should be between -180 and 180. The latitude and longitude you provided are out of bounds.");
+         String cityName = cityInput.getText().trim();
+        if (cityName.isEmpty()) {
+            showAlert("Input Error", "No City Entered", "Please enter a city name to fetch weather.");
             return;
         }
+         try {
+        // URL encode the city name to handle cities with spaces
+        String encodedCityName = URLEncoder.encode(cityName, StandardCharsets.UTF_8.toString());
 
-        String openMeteoRequestUri = String.format("%s?latitude=%f&longitude=%f", OPEN_METEO_API, latitude, longitude);
-        HttpRequest openMeteoRequest = HttpRequest.newBuilder()
-            .uri(URI.create(openMeteoRequestUri))
-            .build();
+        String openMeteoRequestUri = OPEN_METEO_API + "?city=" + encodedCityName +
+            "&daily=temperature_2m_max,temperature_2m_min&timezone=auto";
+        HttpRequest openMeteoRequest = HttpRequest.newBuilder().uri(URI.create(openMeteoRequestUri)).build();
 
         Task<Void> openMeteoTask = new Task<>() {
             @Override
@@ -155,34 +148,28 @@ public class ApiApp extends Application {
                 if (response.statusCode() == 200) {
                     OpenMeteoResponse openMeteoData = gson.fromJson(response.body(), OpenMeteoResponse.class);
                     Platform.runLater(() -> {
-                        weatherDataArea.setText("Weather Data:\n" + formatWeatherData(openMeteoData));
-                        progressBar.setProgress(1);  // Set the progress bar to complete.
+                        weatherDataArea.setText("Fetching additional data...");
+                        fetchAdditionalDataFromAPIXU(encodedCityName, openMeteoData);
+                        progressBar.setProgress(1);
                     });
-
-                    if (needsDetailedAnalysis(openMeteoData)) {
-                        fetchAdditionalDataFromAPIXU(latitude, longitude);
-                    }
                 } else {
                     Platform.runLater(() -> {
-                        showAlert("Fetch Failed", "Unable to retrieve weather data",
-                                  "Please check your network connection or API settings.");
-                        progressBar.setProgress(0);  // Reset progress bar in case of failure.
+                        showAlert("Fetch Failed", "Unable to retrieve weather data", "Please check your network connection or API settings.");
+                        progressBar.setProgress(0);
                     });
                 }
                 return null;
             }
         };
         new Thread(openMeteoTask).start();
-    } catch (NumberFormatException e) {
-        showAlert("Input Error", "Invalid Input", "Please enter valid numbers for latitude and longitude.");
+    } catch (UnsupportedEncodingException e) {
+        showAlert("Error", "Encoding Error", "Error encoding the URL.");
     }
     }
 
-    private void fetchAdditionalDataFromAPIXU(double latitude, double longitude) {
-         String apixuRequestUri = String.format("%s?access_key=%s&query=%f,%f", APIXU_API, API_KEY, latitude, longitude);
-    HttpRequest apixuRequest = HttpRequest.newBuilder()
-        .uri(URI.create(apixuRequestUri))
-        .build();
+    private void fetchAdditionalDataFromAPIXU(String cityName, OpenMeteoResponse openMeteoData) {
+          String apixuRequestUri = APIXU_API + "?access_key=" + API_KEY + "&query=" + cityName;
+        HttpRequest apixuRequest = HttpRequest.newBuilder().uri(URI.create(apixuRequestUri)).build();
 
     Task<Void> apixuTask = new Task<>() {
         @Override
@@ -191,39 +178,51 @@ public class ApiApp extends Application {
             if (response.statusCode() == 200) {
                 APIXUResponse apixuData = gson.fromJson(response.body(), APIXUResponse.class);
                 Platform.runLater(() -> {
-                    String existingText = weatherDataArea.getText();
-                    weatherDataArea.setText(existingText + "\n\nAPIXU Data:\n" + gson.toJson(apixuData));
-                    progressBar.setProgress(1);  // Ensure the progress bar reflects complete status after all data is loaded.
+                    String formattedWeatherData = formatWeatherData(openMeteoData, apixuData);
+                    weatherDataArea.setText(formattedWeatherData);
+                    progressBar.setProgress(1);
                 });
             } else {
                 Platform.runLater(() -> {
                     showAlert("Error", "Fetch Failed", "Unable to retrieve weather data from APIXU.");
-                    progressBar.setProgress(0);  // Reset or handle progress bar in case of failure.
+                    progressBar.setProgress(0);
                 });
             }
             return null;
         }
     };
     new Thread(apixuTask).start();
-
     }
 
-    private String formatWeatherData(OpenMeteoResponse data) {
-    return String.format(
-        "Latitude: %s\nLongitude: %s\nTemperature: %s°C\nWind Speed: %s km/h\nPrecipitation: %s mm",
-        data.latitude, data.longitude, data.temperature, data.windSpeed, data.precipitation
-    );
-}
 
-    private boolean needsDetailedAnalysis(OpenMeteoResponse data) {
-    // Example criteria for deciding if detailed analysis is needed
-    boolean highWind = data.windSpeed > 50; // wind speed greater than 50 km/h
-    boolean heavyRain = data.precipitation > 10; // more than 10 mm of rain
-    boolean extremeTemperature = data.temperature < -10 || data.temperature > 35; // extreme cold or heat
+    private String formatWeatherData(OpenMeteoResponse openMeteoData, APIXUResponse apixuData) {
+         String output = "Weather Data:\n";
 
-    // Return true if any of the conditions are met
-    return highWind || heavyRain || extremeTemperature;
-}
+    if (openMeteoData != null && openMeteoData.daily != null) {
+        output += "Daily Max/Min Temperature:\n";
+        output += String.format("Max: %.1f°C, Min: %.1f°C\n",
+                openMeteoData.daily.temperature_2m_max[0],
+                openMeteoData.daily.temperature_2m_min[0]);
+    } else {
+        output += "No daily temperature data available.\n";
+    }
+
+    if (apixuData != null && apixuData.current != null) {
+        output += "\nCurrent Conditions:\n";
+        if (apixuData.current.weather_descriptions != null) {
+            output += String.format("Temperature: %d°C, Weather: %s, Wind: %d km/h %s, Humidity: %d%%, Visibility: %d km\n",
+                    apixuData.current.temperature,
+                    String.join(", ", apixuData.current.weather_descriptions),
+                    apixuData.current.wind_speed,
+                    apixuData.current.wind_dir,
+                    apixuData.current.humidity,
+                    apixuData.current.visibility);
+        }
+    }
+    return output;
+    }
+
+
 
     private void showAlert(String title, String header, String message) {
         Platform.runLater(() -> {
