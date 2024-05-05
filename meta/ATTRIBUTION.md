@@ -7,6 +7,14 @@ author. Please keep this file organized using Markdown. If you click on
 this file in your GitHub repository website, then you will see that the
 Markdown is transformed into nice-looking HTML.
 
+    - I didn't include any additional local assets.
+
+
+
+
+
+
+
 ### Authored Assets
 
 * Example 1 Asset Name
